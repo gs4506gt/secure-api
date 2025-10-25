@@ -1,4 +1,5 @@
 name: Build, Scan & Sign Docker Image
+
 on:
   push:
     branches:
@@ -31,16 +32,12 @@ jobs:
 
       # 4️⃣ Generate SBOM with Syft
       - name: Generate SBOM with Syft
-        uses: anchore/syft-action@v0.11.1
+        uses: anchore/sbom-action@v0.1.0
         with:
           image: 'my-app:latest'
           output: 'json'
 
       # 5️⃣ Sign image with Cosign
-      - name: Sign Docker image with Cosign
-        uses: sigstore/cosign-installer@v2
-      - name: Cosign sign image
-        env:
-          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+      - name: Install Cosign
         run: |
-          cosign sign docker.io/your-dockerhub-username/my-app:latest
+          curl -sSL https://github.com/sigstore/cosign/releases/download/v2.0.0/cosign-linux-amd64 -o c
