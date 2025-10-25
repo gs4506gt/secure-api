@@ -8,22 +8,34 @@ jobs:
   build-and-scan:
     runs-on: ubuntu-latest
     steps:
+      # 1️⃣ Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 2️⃣ Set up Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # 3️⃣ Build Docker image
       - name: Build Docker image
         run: docker build -t ghcr.io/${{ github.repository }}/secure-api:latest .
 
+      # 4️⃣ Scan image with Trivy (versión estable)
       - name: Scan image with Trivy
-        uses: aquasecurity/trivy-action@v0.11.0
+        uses: aquasecurity/trivy-action@v0.30
         with:
           image-ref: ghcr.io/${{ github.repository }}/secure-api:latest
           format: 'table'
           exit-code: '0'
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
 
+      # 5️⃣ Generate SBOM using Syft CLI
+      - name: Install Syft
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh
+          chmod +x syft
+          mv syft /usr/local/bin/
       - name: Generate SBOM
         run: |
           syft ghcr.io/${{ github.repository }}/secure-api:latest -o json > sbom.json
@@ -33,11 +45,16 @@ jobs:
           name: sbom
           path: sbom.json
 
+      # 6️⃣ Install Cosign
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3.4.0
 
+      # 7️⃣ Sign image with Cosign
       - name: Sign image with Cosign
         env:
           COSIGN_EXPERIMENTAL: "true"
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
         run: |
-          cosign sign ghcr.io/${{ github.repository }}/secure-api:latest           --key ${{ secrets.COSIGN_KEY }}           --yes
+          cosign sign ghcr.io/${{ github.repository }}/secure-api:latest \
+            --key ${{ secrets.COSIGN_KEY }} \
+            --yes
