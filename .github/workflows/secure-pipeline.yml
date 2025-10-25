@@ -1,0 +1,43 @@
+name: Secure Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-and-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: docker build -t ghcr.io/${{ github.repository }}/secure-api:latest .
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@v0.11.0
+        with:
+          image-ref: ghcr.io/${{ github.repository }}/secure-api:latest
+          format: 'table'
+          exit-code: '0'
+
+      - name: Generate SBOM
+        run: |
+          syft ghcr.io/${{ github.repository }}/secure-api:latest -o json > sbom.json
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3.4.0
+
+      - name: Sign image with Cosign
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign sign ghcr.io/${{ github.repository }}/secure-api:latest           --key ${{ secrets.COSIGN_KEY }}           --yes
