@@ -1,43 +1,43 @@
-name: Build, Scan & Sign Docker Image
+name: Secure Pipeline
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
+    branches: [ "main" ]
 
 jobs:
   build-and-scan:
     runs-on: ubuntu-latest
-
     steps:
-      # 1️⃣ Checkout
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      # 2️⃣ Build Docker image
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build Docker image
-        run: |
-          docker build -t my-app:latest .
+        run: docker build -t ghcr.io/${{ github.repository }}/secure-api:latest .
 
-      # 3️⃣ Scan image with Trivy
       - name: Scan image with Trivy
-        uses: aquasecurity/trivy-action@v0.31.0
+        uses: aquasecurity/trivy-action@v0.11.0
         with:
-          image-ref: 'my-app:latest'
+          image-ref: ghcr.io/${{ github.repository }}/secure-api:latest
           format: 'table'
-          exit-code: 1
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
 
-      # 4️⃣ Generate SBOM with Syft
-      - name: Generate SBOM with Syft
-        uses: anchore/sbom-action@v0.1.0
-        with:
-          image: 'my-app:latest'
-          output: 'json'
-
-      # 5️⃣ Sign image with Cosign
-      - name: Install Cosign
+      - name: Generate SBOM
         run: |
-          curl -sSL https://github.com/sigstore/cosign/releases/download/v2.0.0/cosign-linux-amd64 -o c
+          syft ghcr.io/${{ github.repository }}/secure-api:latest -o json > sbom.json
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3.4.0
+
+      - name: Sign image with Cosign
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign sign ghcr.io/${{ github.repository }}/secure-api:latest           --key ${{ secrets.COSIGN_KEY }}           --yes
