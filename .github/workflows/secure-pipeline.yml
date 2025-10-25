@@ -1,43 +1,46 @@
-name: Secure Pipeline
-
+name: Build, Scan & Sign Docker Image
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
+  pull_request:
 
 jobs:
   build-and-scan:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      # 1️⃣ Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
+      # 2️⃣ Build Docker image
       - name: Build Docker image
-        run: docker build -t ghcr.io/${{ github.repository }}/secure-api:latest .
+        run: |
+          docker build -t my-app:latest .
 
+      # 3️⃣ Scan image with Trivy
       - name: Scan image with Trivy
         uses: aquasecurity/trivy-action@v0.31.0
         with:
-          image-ref: ghcr.io/${{ github.repository }}/secure-api:latest
+          image-ref: 'my-app:latest'
           format: 'table'
-          exit-code: '0'
+          exit-code: 1
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
 
-      - name: Generate SBOM
-        run: |
-          syft ghcr.io/${{ github.repository }}/secure-api:latest -o json > sbom.json
-      - name: Upload SBOM artifact
-        uses: actions/upload-artifact@v4
+      # 4️⃣ Generate SBOM with Syft
+      - name: Generate SBOM with Syft
+        uses: anchore/syft-action@v0.11.1
         with:
-          name: sbom
-          path: sbom.json
+          image: 'my-app:latest'
+          output: 'json'
 
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@v3.4.0
-
-      - name: Sign image with Cosign
+      # 5️⃣ Sign image with Cosign
+      - name: Sign Docker image with Cosign
+        uses: sigstore/cosign-installer@v2
+      - name: Cosign sign image
         env:
-          COSIGN_EXPERIMENTAL: "true"
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
         run: |
-          cosign sign ghcr.io/${{ github.repository }}/secure-api:latest           --key ${{ secrets.COSIGN_KEY }}           --yes
+          cosign sign docker.io/your-dockerhub-username/my-app:latest
